@@ -1,8 +1,8 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from openai import OpenAI
 import os
 import json
+import requests
 
 
 app = Flask(__name__)
@@ -16,9 +16,8 @@ CORS(app, resources={
     }
 })
 
-client = OpenAI(
-    api_key=os.environ.get("OPENAI_API_KEY")
-)
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 
 
 SYSTEM_PROMPT = """You are a psychiatric case generator for an educational Doctordle game. 
@@ -48,9 +47,14 @@ def generate_case():
         return "", 204
     
     try:
-        result = client.chat.completions.create(
-            model="gpt-4-mini",
-            messages=[
+        headers = {
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": "gpt-4-mini",
+            "messages": [
                 {
                     "role": "system",
                     "content": SYSTEM_PROMPT
@@ -60,18 +64,25 @@ def generate_case():
                     "content": "Generate a new psychiatric case."
                 }
             ],
-            temperature=0.7,
-            max_tokens=500
-        )
-
-        # Parse the response
-        response_text = result.choices[0].message.content
+            "temperature": 0.7,
+            "max_tokens": 500
+        }
+        
+        response = requests.post(OPENAI_API_URL, json=payload, headers=headers, timeout=30)
+        
+        if response.status_code != 200:
+            return jsonify({"error": f"OpenAI API error: {response.status_code}"}), 500
+        
+        data = response.json()
+        response_text = data["choices"][0]["message"]["content"]
         case_data = json.loads(response_text)
         
         return jsonify(case_data), 200
 
     except json.JSONDecodeError as e:
         return jsonify({"error": f"Failed to parse AI response: {str(e)}"}), 500
+    except requests.exceptions.Timeout:
+        return jsonify({"error": "OpenAI API request timed out"}), 500
     except Exception as e:
         return jsonify({"error": f"Failed to generate case: {str(e)}"}), 500
 
