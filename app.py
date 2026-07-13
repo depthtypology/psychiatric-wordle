@@ -1,30 +1,42 @@
 import os
 import json
 import requests
-from flask import Flask, jsonify, request
-from flask_cors import CORS
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
-app = Flask(__name__)
-CORS(app)
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://depthtypology.site",
+        "http://localhost:3000",
+        "http://localhost:5000"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 
-@app.route("/")
+@app.get("/")
 def home():
-    return jsonify({"message": "API is working"})
+    return {"message": "Psychiatric Doctordle API Online"}
 
 
-@app.route("/api/generate-case", methods=["POST"])
+@app.post("/api/generate-case")
 def generate_case():
-    api_key = os.environ.get("OPENAI_API_KEY")
-    
-    if not api_key:
-        return jsonify({"error": "No API key"}), 500
+    if not OPENAI_API_KEY:
+        return {"error": "API key not configured"}
     
     try:
         response = requests.post(
             "https://api.openai.com/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {api_key}",
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
                 "Content-Type": "application/json"
             },
             json={
@@ -32,27 +44,23 @@ def generate_case():
                 "messages": [
                     {
                         "role": "system",
-                        "content": "Return only JSON: {\"presentation\": \"A patient case\", \"diagnosis\": \"schizophrenia\", \"hints\": [\"hallucinations\", \"delusions\", \"disorganized thinking\"]}"
+                        "content": "Generate a psychiatric case. Return ONLY JSON: {\"presentation\": \"case\", \"diagnosis\": \"name\", \"hints\": [\"h1\", \"h2\", \"h3\"]}"
                     },
                     {
                         "role": "user",
-                        "content": "Generate a case"
+                        "content": "Generate a psychiatric case"
                     }
                 ],
-                "max_tokens": 200
+                "max_tokens": 500
             }
         )
         
         if response.status_code != 200:
-            return jsonify({"error": response.text}), 500
+            return {"error": response.text}
         
         content = response.json()["choices"][0]["message"]["content"]
         case = json.loads(content)
-        return jsonify(case)
+        return case
     
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+        return {"error": str(e)}
