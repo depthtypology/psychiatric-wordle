@@ -39,7 +39,7 @@ def generate_case():
                 "Content-Type": "application/json"
             },
             json={
-                "model": "gpt-4-mini",
+                "model": "gpt-5-mini",
                 "messages": [
                     {
                         "role": "system",
