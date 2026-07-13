@@ -3,7 +3,6 @@ import json
 import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -44,23 +43,38 @@ def generate_case():
                 "messages": [
                     {
                         "role": "system",
-                        "content": "Generate a psychiatric case. Return ONLY JSON: {\"presentation\": \"case\", \"diagnosis\": \"name\", \"hints\": [\"h1\", \"h2\", \"h3\"]}"
+                        "content": "You are a psychiatric case generator. Return ONLY valid JSON (no markdown, no extra text). Format: {\"presentation\": \"2-3 sentence case\", \"diagnosis\": \"diagnosis name\", \"hints\": [\"hint1\", \"hint2\", \"hint3\"]}"
                     },
                     {
                         "role": "user",
-                        "content": "Generate a psychiatric case"
+                        "content": "Generate a new psychiatric case using ICD-11 diagnoses"
                     }
                 ],
-                "max_tokens": 500
-            }
+                "max_tokens": 500,
+                "temperature": 0.7
+            },
+            timeout=30
         )
         
         if response.status_code != 200:
-            return {"error": response.text}
+            return {"error": f"OpenAI API error: {response.status_code}"}
         
-        content = response.json()["choices"][0]["message"]["content"]
-        case = json.loads(content)
-        return case
+        # Get the text content from OpenAI
+        api_data = response.json()
+        content_text = api_data["choices"][0]["message"]["content"]
+        
+        # Parse the JSON string into an object
+        case_data = json.loads(content_text)
+        
+        # Make sure diagnosis is lowercase
+        if "diagnosis" in case_data:
+            case_data["diagnosis"] = case_data["diagnosis"].lower()
+        
+        return case_data
     
+    except json.JSONDecodeError as e:
+        return {"error": f"JSON parse error: {str(e)}"}
+    except requests.exceptions.Timeout:
+        return {"error": "API request timeout"}
     except Exception as e:
         return {"error": str(e)}
