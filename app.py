@@ -43,38 +43,55 @@ def generate_case():
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a psychiatric case generator. Return ONLY valid JSON (no markdown, no extra text). Format: {\"presentation\": \"2-3 sentence case\", \"diagnosis\": \"diagnosis name\", \"hints\": [\"hint1\", \"hint2\", \"hint3\"]}"
+                        "content": "Generate only JSON response with no markdown or extra text. Return this format exactly: {\"presentation\": \"brief patient case\", \"diagnosis\": \"single diagnosis name\", \"hints\": [\"hint 1\", \"hint 2\", \"hint 3\"]}"
                     },
                     {
                         "role": "user",
-                        "content": "Generate a new psychiatric case using ICD-11 diagnoses"
+                        "content": "Generate a psychiatric case"
                     }
                 ],
-                "max_tokens": 500,
+                "max_tokens": 300,
                 "temperature": 0.7
             },
             timeout=30
         )
         
         if response.status_code != 200:
-            return {"error": f"OpenAI API error: {response.status_code}"}
+            return {"error": f"OpenAI error: {response.status_code}"}
         
-        # Get the text content from OpenAI
-        api_data = response.json()
-        content_text = api_data["choices"][0]["message"]["content"]
+        # Extract message content
+        try:
+            api_response = response.json()
+            content = api_response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            
+            if not content:
+                return {"error": "Empty response from OpenAI"}
+            
+            # Clean up potential markdown
+            content = content.strip()
+            if content.startswith("```"):
+                content = content.replace("```json", "").replace("```", "").strip()
+            
+            # Parse JSON
+            case_data = json.loads(content)
+            
+            # Ensure required fields exist and are correct type
+            if "presentation" not in case_data or "diagnosis" not in case_data or "hints" not in case_data:
+                return {"error": "Invalid case format from AI"}
+            
+            # Lowercase diagnosis
+            case_data["diagnosis"] = str(case_data["diagnosis"]).lower().strip()
+            
+            # Ensure hints is a list
+            if not isinstance(case_data["hints"], list):
+                case_data["hints"] = [str(case_data["hints"])]
+            
+            return case_data
+            
+        except json.JSONDecodeError as je:
+            return {"error": f"JSON decode failed: {str(je)}, got: {content[:100]}"}
         
-        # Parse the JSON string into an object
-        case_data = json.loads(content_text)
-        
-        # Make sure diagnosis is lowercase
-        if "diagnosis" in case_data:
-            case_data["diagnosis"] = case_data["diagnosis"].lower()
-        
-        return case_data
-    
-    except json.JSONDecodeError as e:
-        return {"error": f"JSON parse error: {str(e)}"}
     except requests.exceptions.Timeout:
-        return {"error": "API request timeout"}
+        return {"error": "Request timeout"}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"Error: {str(e)}"}
